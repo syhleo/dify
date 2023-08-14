@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Cog8ToothIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useBoolean } from 'ahooks'
+import type { Timeout } from 'ahooks/lib/useRequest/src/types'
 import Panel from '../base/feature-panel'
 import OperationBtn from '../base/operation-btn'
 import VarIcon from '../base/icons/var-icon'
@@ -23,6 +24,8 @@ export type IConfigVarProps = {
   onPromptVariablesChange?: (promptVariables: PromptVariable[]) => void
 }
 
+let conflictTimer: Timeout
+
 const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVariablesChange }) => {
   const { t } = useTranslation()
   const hasVar = promptVariables.length > 0
@@ -34,11 +37,9 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
     return obj
   })()
 
-  const updatePromptVariable = (key: string, updateKey: string, newValue: any) => {
-    if (!(key in promptVariableObj))
-      return
-    const newPromptVariables = promptVariables.map((item) => {
-      if (item.key === key) {
+  const updatePromptVariable = (index: number, updateKey: string, newValue: any) => {
+    const newPromptVariables = promptVariables.map((item, i) => {
+      if (i === index) {
         return {
           ...item,
           [updateKey]: newValue,
@@ -51,11 +52,9 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
     onPromptVariablesChange?.(newPromptVariables)
   }
 
-  const batchUpdatePromptVariable = (key: string, updateKeys: string[], newValues: any[]) => {
-    if (!(key in promptVariableObj))
-      return
-    const newPromptVariables = promptVariables.map((item) => {
-      if (item.key === key) {
+  const batchUpdatePromptVariable = (index: number, updateKeys: string[], newValues: any[]) => {
+    const newPromptVariables = promptVariables.map((item, i) => {
+      if (i === index) {
         const newItem: any = { ...item }
         updateKeys.forEach((updateKey, i) => {
           newItem[updateKey] = newValues[i]
@@ -68,8 +67,8 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
 
     onPromptVariablesChange?.(newPromptVariables)
   }
-
   const updatePromptKey = (index: number, newKey: string) => {
+    clearTimeout(conflictTimer)
     const { isValid, errorKey, errorMessageKey } = checkKeys([newKey], true)
     if (!isValid) {
       Toast.notify({
@@ -78,6 +77,7 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
       })
       return
     }
+
     const newPromptVariables = promptVariables.map((item, i) => {
       if (i === index) {
         return {
@@ -85,9 +85,18 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
           key: newKey,
         }
       }
-
       return item
     })
+
+    conflictTimer = setTimeout(() => {
+      const isKeyExists = promptVariables.some(item => item.key.trim() === newKey.trim())
+      if (isKeyExists) {
+        Toast.notify({
+          type: 'error',
+          message: t('appDebug.varKeyError.keyAlreadyExists', { key: newKey }),
+        })
+      }
+    }, 1000)
 
     onPromptVariablesChange?.(newPromptVariables)
   }
@@ -196,7 +205,7 @@ const ConfigVar: FC<IConfigVarProps> = ({ promptVariables, readonly, onPromptVar
                           type="text"
                           placeholder={key}
                           value={name}
-                          onChange={e => updatePromptVariable(key, 'name', e.target.value)}
+                          onChange={e => updatePromptVariable(index, 'name', e.target.value)}
                           maxLength={getMaxVarNameLength(name)}
                           className="h-6 leading-6 block w-full rounded-md border-0 py-1.5 text-gray-900  placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-gray-200"
                         />)
